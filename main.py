@@ -11,13 +11,13 @@ import aiohttp
 async def async_get_request(url:str, proxy:str=""):
     async with aiohttp.ClientSession() as session:
         async with session.get(url, proxy=proxy) as response:
-            return await response
+            return response
 
 
 async def async_post_request(url:str, proxy:str="", data:dict={}):
     async with aiohttp.ClientSession() as session:
         async with session.post(url, proxy=proxy, data=data) as response:
-            return await response
+            return response
 
 django_url = 'http://localhost:8001/api/fastapi/'
 
