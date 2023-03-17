@@ -70,7 +70,7 @@ async def send_response_to_django(tg_id:str, message:str):
 
 def get_if_scanning(tg_id:int):
     global Redis
-    if Redis.get(str(tg_id)).decode('utf-8')=='True':
+    if str(Redis.get(str(tg_id))).replace('b','').replace("'", "") =='True':
         return True
     return False
 
@@ -91,9 +91,9 @@ def set_if_scanning(tg_id:int, value:str):
 # WORKER #
 ##########
 
-async def worker(tg_id:int, redis):
+async def worker(tg_id:int):
     while True:
-        if Redis.get(str(tg_id)).decode('utf-8')!='True':
+        if not get_if_scanning(tg_id):
             return
         await send_response_to_django(
             tg_id,
@@ -192,15 +192,16 @@ class Config(BaseModel):
 
 class StartData(BaseModel):
     tg_id:int
-    user_config: Config
+#    user_config: Config
 
 class StopData(BaseModel):
     tg_id: int
 
 
 @router.post('/start')
-async def start(data:Data):
+async def start(data:StartData):
     tg_id = data.tg_id
+ 
     if get_if_scanning(tg_id):
         await send_response_to_django(
             tg_id=tg_id,
@@ -208,7 +209,7 @@ async def start(data:Data):
         )
     else:
         set_if_scanning(tg_id, 'True')
-        asyncio.create_task(worker(tg_id, redis))
+        asyncio.create_task(worker(tg_id))
 
 
 
@@ -216,7 +217,7 @@ async def start(data:Data):
 @router.post('/stop')
 async def stop(data:StopData):
     tg_id = data.tg_id
-    if get_if_scanning(tg_id):
+    if not get_if_scanning(tg_id):
         await send_response_to_django(
             tg_id=tg_id,
             message="Скан и так не идет"
