@@ -84,6 +84,26 @@ def set_if_scanning(tg_id:int, value:str):
 
 
 
+################
+#DATA INSTANCES#
+################
+
+class Account(BaseModel):
+    link:str
+    title:str
+
+class Config(BaseModel):
+    token:str
+    accounts: List[Account]
+    proxy: str
+    max_purchases: str
+
+class StartData(BaseModel):
+    tg_id:int
+    user_config: Config
+
+class StopData(BaseModel):
+    tg_id: int
 
 
 
@@ -91,8 +111,9 @@ def set_if_scanning(tg_id:int, value:str):
 # WORKER #
 ##########
 
-async def worker(tg_id:int):
+async def worker(tg_id:int, user_config:Config):
     while True:
+        print(user_config)
         if not get_if_scanning(tg_id):
             return
         await send_response_to_django(
@@ -104,7 +125,7 @@ async def worker(tg_id:int):
 
 
 
-# async def worker(tg_id:int):
+# async def worker(tg_id:int, user_config:Config):
 
 #     #check if StopLztBot flag is True
 #     if not get_if_scanning(tg_id):
@@ -157,13 +178,6 @@ async def worker(tg_id:int):
 
 
 
-##########
-# WORKER #
-##########
-
-
-
-
 
 
 ###############
@@ -180,28 +194,11 @@ Redis = redis.Redis(
     )
 
 
-class Account(BaseModel):
-    link:str
-    title:str
-
-class Config(BaseModel):
-    token:str
-    accounts: List[Account]
-    proxy: str
-    max_purchases: str
-
-class StartData(BaseModel):
-    tg_id:int
-#    user_config: Config
-
-class StopData(BaseModel):
-    tg_id: int
-
-
 @router.post('/start')
 async def start(data:StartData):
     tg_id = data.tg_id
- 
+    user_config = data.user_config
+
     if get_if_scanning(tg_id):
         await send_response_to_django(
             tg_id=tg_id,
@@ -209,14 +206,12 @@ async def start(data:StartData):
         )
     else:
         set_if_scanning(tg_id, 'True')
-        asyncio.create_task(worker(tg_id))
-
-
-
+        asyncio.create_task(worker(tg_id, user_config))
 
 @router.post('/stop')
 async def stop(data:StopData):
     tg_id = data.tg_id
+
     if not get_if_scanning(tg_id):
         await send_response_to_django(
             tg_id=tg_id,
