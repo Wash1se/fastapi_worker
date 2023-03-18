@@ -281,7 +281,7 @@ class MyLolz:
         
         if items["items"] != []:
 
-            await send_response_to_django(self.tg_id, "Попытка бронирования аккаунтов...")
+            await send_response_to_django(self.tg_id, "Попытка покупки аккаунтов...")
 
             for item in items['items']:
                 
