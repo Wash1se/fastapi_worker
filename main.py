@@ -222,7 +222,7 @@ class MyLolz:
 
                 try:
                     #await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response}")
-                    await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
+                    #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
                     return response
                 except Exception:
                    # await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response['errors']}")
@@ -411,6 +411,8 @@ async def stop(data:StopData):
 
 app.include_router(router)
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
+    print('zapusk')
+    Redis.delete(*Redis.keys('*'))
 #     uvicorn.run('main:app', host="0.0.0.0", port=8000, workers=3)
 
