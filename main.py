@@ -125,54 +125,53 @@ async def worker(tg_id:int, user_config:Config):
 
 
 
-# async def worker(tg_id:int, user_config:Config):
+async def worker(tg_id:int, user_config:Config):
 
-#     #check if StopLztBot flag is True
-#     if not get_if_scanning(tg_id):
-#         return
+    #check if StopLztBot flag is True
+    if not get_if_scanning(tg_id):
+        return
 
-#     #get info from user's config
-#     INPUT_INFO = get_data(f'info_{tg_id}.json')
-#     try:
-#         #lztbot initializing
-#         lolzbot = MyLolz(token=INPUT_INFO["token"], tg_id=tg_id, proxy=str(INPUT_INFO['proxy']))
+    #get info from user's config
+    try:
+        #lztbot initializing
+        lolzbot = MyLolz(token=user_config.token, tg_id=tg_id, proxy=str(user_config.proxy))
 
-#         if await lolzbot.set_lolz_id():
-#             #get info about max purchases user's config
-#             max_purchases = int(INPUT_INFO["max_purchases"])
+        if await lolzbot.set_lolz_id():
+            #get info about max purchases user's config
+            max_purchases = int(user_config.max_purchases)
 
-#             await send_response_to_django(tg_id, 'Скан аккаунтов...\nДля остановки введи "/stop_scanning"')
+            await send_response_to_django(tg_id, 'Скан аккаунтов...\nДля остановки введи "/stop_scanning"')
 
-#             while True:
-#                 #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
-#                 if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(tg_id)):
-#                     set_if_scanning(tg_id, 'False')
-#                     return 
+            while True:
+                #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
+                if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(tg_id)):
+                    set_if_scanning(tg_id, 'False')
+                    return 
 
-#                 #iterate for each account
-#                 for account_input_info in INPUT_INFO["accounts"]:
+                #iterate for each account
+                for account_input_info in user_config.accounts:
 
-#                     #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
-#                     if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(tg_id)):
-#                         set_if_scanning(tg_id, 'False')
-#                         return False
+                    #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
+                    if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(tg_id)):
+                        set_if_scanning(tg_id, 'False')
+                        return False
                     
-#                     # try to scan accounts
-#                     try:
-#                         await lolzbot.scan_accounts(account_input_info=account_input_info, link=account_input_info['link'], max_purchases=max_purchases)
-#                     #handling all exceptions occured within the lztbot
-#                     except Exception as e:
-#                         await send_response_to_django(tg_id, ERROR_MSG.format(f"{e.args}\n\nбот продолжает скан"))
-#         else:
-#             await send_response_to_django(tg_id, 'Ошибка с прокси\n\nБот останавливает скан')
-#             set_if_scanning(tg_id, 'False')
-#             return         
+                    # try to scan accounts
+                    try:
+                        await lolzbot.scan_accounts(account_input_info=account_input_info, link=account_input_info['link'], max_purchases=max_purchases)
+                    #handling all exceptions occured within the lztbot
+                    except Exception as e:
+                        await send_response_to_django(tg_id, ERROR_MSG.format(f"{e.args}\n\nбот продолжает скан"))
+        else:
+            await send_response_to_django(tg_id, 'Ошибка с прокси\n\nБот останавливает скан')
+            set_if_scanning(tg_id, 'False')
+            return         
 
-#     #handling all exceptions occured during getting info from user's config
-#     except Exception as e:
-#         await message.answer(ERROR_MSG.format(f"\n{e.args}\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
-#         STOP_USER_WORKER[tg_id] = True
-#         return
+    #handling all exceptions occured during getting info from user's config
+    except Exception as e:
+        await message.answer(ERROR_MSG.format(f"\n{e.args}\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
+        STOP_USER_WORKER[tg_id] = True
+        return
 
 
 
