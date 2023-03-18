@@ -237,12 +237,12 @@ class MyLolz:
             return {"items":[]}
 
 
-    async def fast_buy(self, item_id:str, item_price:str, account_input_info:dict) -> bool:
+    async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
         response = requests.request("POST", f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, data={"price":item_price},  proxies={'http':self.proxy, 'https':self.proxy}).json()
         await asyncio.sleep(3)
         try:
             if response['status'] == 'ok':
-                await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info['title']} куплен")
+                await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
 
                 # item_origin=response['item']['item_origin']
                 # category_id=response['item']['category_id']
@@ -270,13 +270,13 @@ class MyLolz:
             
 
 
-    async def scan_accounts(self, link=None, max_purchases=None, account_input_info:dict=None) -> None:
+    async def scan_accounts(self, link=None, max_purchases=None, account_input_info:Account=None) -> None:
 
         link = link.replace("https://zelenka.guru/market/", self.__base_url).replace("https://lzt.market/",
         self.__base_url).replace("https://lolz.live/market/", self.__base_url).replace("https://lolz.guru/market/",
         self.__base_url).replace("https://api.lolz.guru/market/", self.__base_url)+f"&page={self.page}"
 
-        items = await self.get_accounts(link, account_input_info['title'])
+        items = await self.get_accounts(link, account_input_info.title)
         
         
         if items["items"] != []:
@@ -341,7 +341,7 @@ async def worker(tg_id:int, user_config:Config):
                     
                     # try to scan accounts
                     try:
-                        await lolzbot.scan_accounts(account_input_info=account_input_info, link=account_input_info['link'], max_purchases=max_purchases)
+                        await lolzbot.scan_accounts(account_input_info=account_input_info, link=account_input_info.link, max_purchases=max_purchases)
                     #handling all exceptions occured within the lztbot
                     except Exception as e:
                         await send_response_to_django(tg_id, ERROR_MSG.format(f"{e.args}\n\nбот продолжает скан"))
