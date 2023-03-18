@@ -233,7 +233,7 @@ class MyLolz:
             # TelegramRequests.send_message(chat_id=self.tg_id, text="Ошибка получения аккаунтов: "+str(e))
             return {"items":[]}
         except Exception as e:
-            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов: {e.args}")
+            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов: {response.reason}")
             return {"items":[]}
 
 
