@@ -220,28 +220,23 @@ class MyLolz:
         try:
             response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
             await asyncio.sleep(4)
- 
-            try:       
-                await send_response_to_django(self.tg_id, "Ошибка получения аккаунтов {title}: "+response['message'][0])
+            try:
+                #await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response}")
+                if response["searchUrl"]:
+                    #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
+                    return response
+            except Exception as E:
+               # await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response['errors']}")
+                print(E,response)
+                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {response['errors'][0]}: {E}")
                 return {"items":[]}
-            except:
-                try:
-                    #await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response}")
-                    if response['TotalItems']:
-                        await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                        return response
-                except Exception as E:
-                   # await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response['errors']}")
-                    print(E,response)
-                    await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}: {response['errors'][0]}")
-                    return {"items":[]}
 
         except requests.exceptions.ProxyError as E:
             # TelegramRequests.send_message(chat_id=self.tg_id, text="Ошибка получения аккаунтов: "+str(e))
             return {"items":[]}
         except Exception as e:
             print(e, response)
-            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}: {e}")
+            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}: {response.reason}")
             return {"items":[]}
 
 
@@ -286,11 +281,8 @@ class MyLolz:
         self.__base_url).replace("https://api.lolz.guru/market/", self.__base_url)+f"&page={self.page}"
 
         items = await self.get_accounts(link, account_input_info.title)
-        
-        
+         
         if items["items"] != []:
-
-
             for item in items['items']:
                 if str(item["seller"]["user_id"]) == str(self.user_id): 
                     continue
@@ -302,9 +294,9 @@ class MyLolz:
                 price = str(item['price'])
 
                 try:
-                    await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_input_info['title']}...")
+                    await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_input_info.title}...")
                     await self.fast_buy(item_id=id, item_price=price, account_input_info=account_input_info)
-                except:
+                except Exception as E:
                     break
 
                 if (len(self.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(self.tg_id)):
@@ -360,7 +352,7 @@ async def worker(tg_id:int, user_config:Config):
 
     #handling all exceptions occured during getting info from user's config
     except Exception as e:
-        await send_response_to_django(tg_id, ERROR_MSG.format(f"\n{e.args}\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
+        await send_response_to_django(tg_id, ERROR_MSG.format("\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
         set_if_scanning(tg_id, 'False')
         return
 
@@ -419,8 +411,6 @@ async def stop(data:StopData):
 
 app.include_router(router)
 
-if __name__ == "__main__":
-    print('zapusk')
-    Redis.delete(*Redis.keys('*'))
+#if __name__ == "__main__":
 #     uvicorn.run('main:app', host="0.0.0.0", port=8000, workers=3)
 
