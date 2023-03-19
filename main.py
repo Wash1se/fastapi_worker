@@ -40,14 +40,14 @@ HELP_MSG='''Список всех комманд:
 # REQUESTS FUNCS #
 ##################
 
-async def async_get_request(url:str, proxy:str=""):
-    async with aiohttp.ClientSession() as session:
+async def async_get_request(url:str, headers:dict={}, proxy:str=""):
+    async with aiohttp.ClientSession(headers=headers) as session:
         async with session.get(url, proxy=proxy) as response:
             return response
 
 
-async def async_post_request(url:str, proxy:str="", data:dict={}):
-    async with aiohttp.ClientSession() as session:
+async def async_post_request(url:str, headers:dict={}, proxy:str="", data:dict={}):
+    async with aiohttp.ClientSession(headers=headers) as session:
         async with session.post(url, proxy=proxy, data=data) as response:
             return response
 
@@ -124,7 +124,8 @@ class MyLolz:
     async def set_lolz_id(self):
         if self.user_id is None:
             try:
-                response = requests.request("GET", self.__base_url, headers=self.headers,  proxies={'http':str(self.proxy), 'https':str(self.proxy)}).json()
+                
+                response = (await async_get_request(self.__base_url, headers=self.headers, proxy=self.proxy)).json()
                 self.user_id = response['system_info']['visitor_id']
                 time.sleep(3)
             except requests.exceptions.ProxyError:
@@ -212,7 +213,7 @@ class MyLolz:
 
     async def get_accounts(self, link, title):
         try:
-            response = requests.request("GET", link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxies={'http':self.proxy, 'https':self.proxy}, timeout=1).json()
+            response = (await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)).json()
             await asyncio.sleep(3)
  
             try:           
@@ -238,7 +239,7 @@ class MyLolz:
 
 
     async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
-        response = requests.request("POST", f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, data={"price":item_price},  proxies={'http':self.proxy, 'https':self.proxy}).json()
+        response = (await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})).json()
         await asyncio.sleep(3)
         try:
             if response['status'] == 'ok':
