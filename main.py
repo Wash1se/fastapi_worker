@@ -7,6 +7,7 @@ import redis
 import requests
 import aiohttp
 from typing import List
+import json
 
 
 ###############
@@ -43,13 +44,18 @@ HELP_MSG='''Список всех комманд:
 async def async_get_request(url:str, headers:dict={}, proxy:str=""):
     async with aiohttp.ClientSession(headers=headers) as session:
         async with session.get(url, proxy=proxy) as response:
-            return response
+            try:
+                return await response.json()
+            except:
+                return response
 
-
-async def async_post_request(url:str, headers:dict={}, proxy:str="", data:dict={}):
+async def async_post_request(url:str, headers:dict=None, proxy:str=None, data:dict={}):
     async with aiohttp.ClientSession(headers=headers) as session:
         async with session.post(url, proxy=proxy, data=data) as response:
-            return response
+            try:
+                return await response.json()
+            except:
+                return response
 
 django_url = 'http://localhost:8001/api/fastapi/'
 
@@ -124,13 +130,12 @@ class MyLolz:
     async def set_lolz_id(self):
         if self.user_id is None:
             try:
-                
-                response = (await async_get_request(self.__base_url, headers=self.headers, proxy=self.proxy)).json()
+                response = await async_get_request(url=self.__base_url, headers=self.headers, proxy=self.proxy)
                 self.user_id = response['system_info']['visitor_id']
                 time.sleep(3)
-            except requests.exceptions.ProxyError:
+                return True
+            except:
                 return False
-        return True
 
 
     def __init__(self, token:str, tg_id, proxy) -> None:
@@ -213,34 +218,37 @@ class MyLolz:
 
     async def get_accounts(self, link, title):
         try:
-            response = (await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)).json()
-            await asyncio.sleep(3)
+            response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
+            await asyncio.sleep(4)
  
-            try:           
-                await send_response_to_django(self.tg_id, "Ошибка получения аккаунтов: "+response['message'][0])
+            try:       
+                await send_response_to_django(self.tg_id, "Ошибка получения аккаунтов {title}: "+response['message'][0])
                 return {"items":[]}
             except:
-
                 try:
                     #await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response}")
-                    #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                    return response
-                except Exception:
+                    if response['TotalItems']:
+                        await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
+                        return response
+                except Exception as E:
                    # await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response['errors']}")
-                    TelegramRequests.send_message(chat_id=self.tg_id, text=f"Ошибка получения аккаунтов: {response['errors'][0]}")
+                    print(E,response)
+                    await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}: {response['errors'][0]}")
                     return {"items":[]}
 
-        except requests.exceptions.ProxyError:
+        except requests.exceptions.ProxyError as E:
             # TelegramRequests.send_message(chat_id=self.tg_id, text="Ошибка получения аккаунтов: "+str(e))
             return {"items":[]}
         except Exception as e:
-            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов: {response.reason}")
+            print(e, response)
+            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}: {e}")
             return {"items":[]}
 
 
     async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
-        response = (await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})).json()
+        response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
         await asyncio.sleep(3)
+        print('buy', response)
         try:
             if response['status'] == 'ok':
                 await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
@@ -282,10 +290,8 @@ class MyLolz:
         
         if items["items"] != []:
 
-            await send_response_to_django(self.tg_id, "Попытка покупки аккаунтов...")
 
             for item in items['items']:
-                
                 if str(item["seller"]["user_id"]) == str(self.user_id): 
                     continue
 
@@ -296,6 +302,7 @@ class MyLolz:
                 price = str(item['price'])
 
                 try:
+                    await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_input_info['title']}...")
                     await self.fast_buy(item_id=id, item_price=price, account_input_info=account_input_info)
                 except:
                     break
@@ -353,8 +360,8 @@ async def worker(tg_id:int, user_config:Config):
 
     #handling all exceptions occured during getting info from user's config
     except Exception as e:
-        await message.answer(ERROR_MSG.format(f"\n{e.args}\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
-        STOP_USER_WORKER[tg_id] = True
+        await send_response_to_django(tg_id, ERROR_MSG.format(f"\n{e.args}\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
+        set_if_scanning(tg_id, 'False')
         return
 
 
