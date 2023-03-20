@@ -1,9 +1,17 @@
 from pydantic import BaseModel
+from sqlalchemy import Column, BigInteger, Boolean, String, DateTime
+from sqlalchemy import update, select
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
+
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
+
 import time
 import asyncio
-import redis
+import settings
+# import redis
+import uvicorn
 import requests
 import aiohttp
 from typing import List
@@ -34,6 +42,132 @@ HELP_MSG='''Список всех комманд:
 
 
 
+
+
+########################################
+# BLOCK FOR COMMON INTERACTION WITH DB #
+########################################
+
+# create async engine to interact with db
+engine = create_async_engine(settings.REAL_DATABASE_URL, future=True)
+
+#create session for the interaction with db
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+
+
+########################
+# BLOCK WITH DB MODELS #
+########################
+
+Base = declarative_base()
+
+class ScanningUser(Base):
+    __tablename__ = 'scanning_users'
+
+    tg_id = Column(BigInteger, primary_key=True)
+    is_scanning = Column(Boolean(), default=False)
+
+
+#######################################################
+# BLOCK FOR INTERACTION WITH DB IN BUISSINESS PROCCESS#
+#######################################################
+
+class ScanningUsersDAL:
+    """Data Access Layer for operating user info"""
+
+    def __init__(self, db_session: AsyncSession):
+        self.db_session = db_session
+
+    async def create_scanning_user(self, tg_id:int, is_scanning:bool) -> ScanningUser:
+        new_user = ScanningUser(
+            tg_id=tg_id,
+            is_scanning = is_scanning
+        )
+        self.db_session.add(new_user)
+        await self.db_session.flush()
+        return new_user
+
+    async def update_scanning_user(self, tg_id:int, **kwargs) -> ScanningUser:
+        query = (
+            update(ScanningUser)
+            .where(ScanningUser.tg_id == tg_id)
+            .values(kwargs)
+            .returning(ScanningUser)
+        )
+        res = await self.db_session.execute(query)
+        updated_user_row = res.fetchone()
+        if updated_user_row is not None:
+            return updated_user_row[0]
+
+
+
+#########################
+# BLOCK WITH API MODELS #
+#########################
+
+class TunedModel(BaseModel):
+        class Config:
+            """tells pydantic to convert even non dict objects to json"""
+            orm_mode = True
+
+class ShowAndCreateScanningUser(TunedModel):
+    tg_id: int
+    is_scanning: bool
+
+
+#########################
+# BLOCK WITH API ROUTES #
+#########################
+
+async def get_if_scanning(tg_id:int):
+    async with async_session() as session:
+        async with session.begin():
+            result=(await session.execute(select(ScanningUser).filter_by(tg_id=tg_id))).scalar_one_or_none()
+            print('RESULT', result, type(result))
+            if result is None:
+                return None
+            else:
+                return result.is_scanning
+
+async def create_scanning_user(tg_id: int, is_scanning: bool):
+    async with async_session() as session:
+        async with session.begin():
+            scanning_users_dal = ScanningUsersDAL(session)
+
+            user = await scanning_users_dal.create_scanning_user(
+                tg_id=tg_id,
+                is_scanning=is_scanning
+                )
+
+            return ShowAndCreateScanningUser(
+                tg_id=user.tg_id,
+                is_scanning=user.is_scanning
+            )
+
+async def set_if_scanning(tg_id: int, is_scanning:bool):
+    async with async_session() as session:
+        async with session.begin():
+            scanning_users_dal = ScanningUsersDAL(session)
+            updated_user = await scanning_users_dal.update_scanning_user(
+                tg_id=tg_id, 
+                is_scanning=is_scanning
+            )
+            return ShowAndCreateScanningUser(
+                tg_id=updated_user.tg_id,
+                is_scanning=updated_user.is_scanning
+            )
+
+
+#async def set_if_scanning(tg_id: int, is_scanning:bool):
+#    scanning_user = await get_if_scanning(tg_id)
+#    print('tip', type(scanning_user), scanning_user)
+#    if scanning_user != None:
+#        print("Пользователь найден")
+#        return await _update_scanning_user(tg_id=tg_id, is_scanning=is_scanning)
+#    else:
+#        print("Пользователь не найден")
+#        return await _create_new_scanning_user(tg_id=tg_id, is_scanning=False)
 
 
 
@@ -74,18 +208,18 @@ async def send_response_to_django(tg_id:str, message:str):
 ####################
 
 
-def get_if_scanning(tg_id:int):
-    global Redis
-    if str(Redis.get(str(tg_id))).replace('b','').replace("'", "") =='True':
-        return True
-    return False
+# def get_if_scanning(tg_id:int):
+#     global Redis
+#     if str(Redis.get(str(tg_id))).replace('b','').replace("'", "") =='True':
+#         return True
+#     return False
 
-def set_if_scanning(tg_id:int, value:str):
-    global Redis
-    with Redis.pipeline() as pipe:
-        pipe.multi()
-        pipe.set(str(tg_id), value.encode('utf-8'))
-        result = pipe.execute()
+# def set_if_scanning(tg_id:int, value:str):
+#     global Redis
+#     with Redis.pipeline() as pipe:
+#         pipe.multi()
+#         pipe.set(str(tg_id), value.encode('utf-8'))
+#         result = pipe.execute()
 
 
 
@@ -151,71 +285,6 @@ class MyLolz:
         }
 
 
-    # async def refuse_guarantee(self, item_id:int) -> bool:
-    #     response = requests.request("POST", f"{self.__base_url+str(item_id)}/refuse-guarantee", headers=self.headers,  proxies={'http':self.proxy, 'https':self.proxy}).json()
-    #     await asyncio.sleep(3)
-    #     try:
-    #         if response['status'] == 'ok':
-    #             TelegramRequests.send_message(chat_id=self.tg_id, text=f'[{time.strftime("%H:%M:%S")}] Гарантия отменена')
-    #             return True
-    #     except Exception:
-    #         TelegramRequests.send_message(chat_id=self.tg_id, text="Ошибка отмены гарантии: "+response['errors'][0]+"\n\nБот продолжает скан")
-    #         return False
-
-
-    # async def cancel_account(self, item_id) -> False:
-    #     response = requests.request("POST", f"{self.__base_url+item_id}/cancel-reserve/", headers=self.headers,  proxies={'http':self.proxy, 'https':self.proxy}).json()
-    #     time.sleep(3)
-    #     try:
-    #         if response['status'] == 'ok': 
-    #             TelegramRequests.send_message(chat_id=self.tg_id, text=f"[{time.strftime('%H:%M:%S')}] Бронирование отменено")
-    #             del self.purchased_accounts[item_id]
-    #     except Exception:
-    #         TelegramRequests.send_message(chat_id=self.tg_id, text="Ошибка отмены бронирования"+str(response['errors'][0])+"\n\nБот продолжает скан")
-
-
-    # async def check_goods(self, page_id:int, item_id:int, login_password:str, extra_data:dict) -> None:
-    #     url = self.__base_url+f"{page_id}/goods/check"
-
-    #     payload = {'login_password':login_password, 'resell_item_id':item_id}
-
-    #     payload.update(extra_data)
-
-    #     response = requests.request("POST", url, headers=self.headers, data=payload,  proxies={'http':self.proxy, 'https':self.proxy}).json()
-
-    #     await asyncio.sleep(3)
-
-    #     try:
-    #         if response['status'] == 'ok':
-    #             TelegramRequests.send_message(chat_id=self.tg_id, text=f'[{time.strftime("%H:%M:%S")}] '+response['message'])
-    #     except Exception:
-    #         TelegramRequests.send_message(chat_id=self.tg_id, text="Не удалось проверить аккаунт (стадия продажи): "+str(response['errors'][0])+"\n\nБот продолжает скан")
-
-
-    # async def sell_item(self, item_id:int, category_id:int, title:str, price:int, item_origin:str, extended_guarantee=0, currency: str='rub', email_login_data:str=0, extra_data:dict={}) -> None:
-        
-    #     login_password = email_login_data
-        
-    #     '''check if email_login_data required Fortnite, Epic games, Escape from Tarkov'''
-    #     if category_id not in (9, 12, 18):
-    #         email_login_data = 0
-
-    #     url = self.__base_url+f"item/add?category_id={category_id}&currency='rub'&title='{title}'&price={price}&item_origin={item_origin}&extended_guarantee={extended_guarantee}&has_email_login_data=1&email_login_data={email_login_data}&resell_item_id={item_id}"
-
-    #     response = requests.request("POST", url, headers=self.headers,  proxies={'http':self.proxy, 'https':self.proxy}).json()
-    #     await asyncio.sleep(3)
-    #     try:
-    #         if response['status'] == 'ok':
-    #             await send_response_to_django(tg_id, f'[{time.strftime("%H:%M:%S")}] '+'Сознадо объявление(товар ещё не продается)')
-    #             # SaveAfterPurchase.save_all_data(f"ADD ITEM INFO\n{response}\n\n")
-
-    #             if await self.refuse_guarantee(item_id):
-    #                 await self.check_goods(page_id=response['item']['item_id'], item_id=item_id, login_password=login_password, extra_data=extra_data)   
-                
-    #     except Exception:
-    #         await send_response_to_django(tg_id, response['errors'][0]+"\n\nБот продолжает скан")
- 
-
     async def get_accounts(self, link, title):
         try:
             response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
@@ -248,28 +317,12 @@ class MyLolz:
             if response['status'] == 'ok':
                 await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
 
-                # item_origin=response['item']['item_origin']
-                # category_id=response['item']['category_id']
-                # extended_guarantee=response['item']['extended_guarantee']
-                # account_data=response['item']["loginData"]["raw"]
 
-                # SaveAfterPurchase.save_all_data(f"PURCHASE INFO\n{response}\n")
                 self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
-                #SaveAfterPurchase.save_data(response)
-
                 
-
-                #extra_data = {}
-
-                #check cinema cervice
-                #if response['item']["category_id"] == 23: extra_data['extra[service_id]']=response['item']['cinema_service_id']
-
-                #await self.sell_item(item_id=item_id, category_id=category_id, title=account_input_info['title'], price=account_input_info['price'], item_origin=item_origin, 
-                   # extended_guarantee=extended_guarantee, email_login_data = account_data, extra_data=extra_data)
 
         except:
             await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: '+response['errors'][0]+"\n\nбот продолжает скан")
-            # await cancel_account(item_id)
             raise AccountBuyingError
             
 
@@ -299,9 +352,9 @@ class MyLolz:
                 except Exception as E:
                     break
 
-                if (len(self.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(self.tg_id)):
+                if (len(self.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(self.tg_id)):
                     await send_response_to_django(self.tg_id, 'Бот завершил скан аккаунтов (max_purchases)')
-                    set_if_scanning(self.tg_id, 'False')
+                    await set_if_scanning(self.tg_id, False)
                     return False
 
 
@@ -311,7 +364,7 @@ class MyLolz:
 async def worker(tg_id:int, user_config:Config):
 
     #check if StopLztBot flag is True
-    if not get_if_scanning(tg_id):
+    if not await get_if_scanning(tg_id):
         return
 
     #get info from user's config
@@ -327,16 +380,16 @@ async def worker(tg_id:int, user_config:Config):
 
             while True:
                 #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
-                if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(tg_id)):
-                    set_if_scanning(tg_id, 'False')
+                if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(tg_id)):
+                    await set_if_scanning(tg_id, False)
                     return 
 
                 #iterate for each account
                 for account_input_info in user_config.accounts:
 
                     #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
-                    if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not get_if_scanning(tg_id)):
-                        set_if_scanning(tg_id, 'False')
+                    if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(tg_id)):
+                        await set_if_scanning(tg_id, False)
                         return False
                     
                     # try to scan accounts
@@ -347,13 +400,13 @@ async def worker(tg_id:int, user_config:Config):
                         await send_response_to_django(tg_id, ERROR_MSG.format(f"{e.args}\n\nбот продолжает скан"))
         else:
             await send_response_to_django(tg_id, 'Ошибка с прокси\n\nБот останавливает скан')
-            set_if_scanning(tg_id, 'False')
+            await set_if_scanning(tg_id, False)
             return         
 
     #handling all exceptions occured during getting info from user's config
     except Exception as e:
         await send_response_to_django(tg_id, ERROR_MSG.format("\nСкорее всего что-то не так с вашим конфиг файлом или прокси"))
-        set_if_scanning(tg_id, 'False')
+        await set_if_scanning(tg_id, False)
         return
 
 
@@ -369,11 +422,7 @@ async def worker(tg_id:int, user_config:Config):
 
 router = APIRouter()
 app = FastAPI(title="lzttgbot")
-Redis = redis.Redis(
-    host="localhost",
-    port=6379,
-    db=0,
-    )
+
 
 
 @router.post('/start')
@@ -381,26 +430,33 @@ async def start(data:StartData):
     tg_id = data.tg_id
     user_config = data.user_config
 
-    if get_if_scanning(tg_id):
+    is_scanning = await get_if_scanning(tg_id)
+    if is_scanning == True:
         await send_response_to_django(
             tg_id=tg_id,
             message="Скан уже идет"
         )
     else:
-        set_if_scanning(tg_id, 'True')
+        if is_scanning == None:
+            await create_scanning_user(tg_id, True)
+            print('sozdanie')
+        if is_scanning == False:
+            await set_if_scanning(tg_id, True)
+            print('zapusk')
         asyncio.create_task(worker(tg_id, user_config))
 
 @router.post('/stop')
 async def stop(data:StopData):
     tg_id = data.tg_id
-
-    if not get_if_scanning(tg_id):
+    is_scanning = await get_if_scanning(tg_id)
+    
+    if is_scanning is None or is_scanning == False:
         await send_response_to_django(
             tg_id=tg_id,
             message="Скан и так не идет"
         )
     else:
-        set_if_scanning(tg_id, 'False')
+        await set_if_scanning(tg_id, False)
                 
         await send_response_to_django(
             tg_id=tg_id,
@@ -411,6 +467,6 @@ async def stop(data:StopData):
 
 app.include_router(router)
 
-#if __name__ == "__main__":
-#     uvicorn.run('main:app', host="0.0.0.0", port=8000, workers=3)
+if __name__ == "__main__":
+    uvicorn.run('main:app', host="0.0.0.0", port=8000, workers=3)
 
