@@ -180,11 +180,12 @@ async def async_get_request(url:str, headers:dict={}, proxy:str=""):
         async with session.get(url, proxy=proxy) as response:
             try:
                 return await response.json()
-            except:
+            except Exception as e:
+                print(e)
                 return response
 
 async def async_post_request(url:str, headers:dict=None, proxy:str=None, data:dict={}):
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession(headers=headers, raise_for_status=True) as session:
         async with session.post(url, proxy=proxy, data=data) as response:
             try:
                 return await response.json()
@@ -286,33 +287,25 @@ class MyLolz:
 
 
     async def get_accounts(self, link, title):
-        try:
-            response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
-            await asyncio.sleep(4)
+        response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
+        await asyncio.sleep(3.2)
+        if type(response) == dict:   
             try:
-                #await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response}")
-                if response["searchUrl"]:
-                    #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                    return response
-            except Exception as E:
-               # await bot.send_message(chat_id=5509484655, text=f"{self.message.from_user.username}'s get acc func: {response['errors']}")
-                print(E,response)
-                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {response['errors'][0]}: {E}")
-                return {"items":[]}
-
-        except requests.exceptions.ProxyError as E:
-            # TelegramRequests.send_message(chat_id=self.tg_id, text="Ошибка получения аккаунтов: "+str(e))
-            return {"items":[]}
-        except Exception as e:
-            print(e, response)
-            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}: {response.reason}")
-            return {"items":[]}
-
+                response["searchUrl"]
+                #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
+                return response
+            except:
+                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
+                return {'items':[]} 
+        else:
+            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response.reason}\n\nБот продолжает скан")
+            return {'items':[]}
+           # response.raise_for_status()
+            #await bot.send_message(5509484655, f" get acc func: {response}")
 
     async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
         response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
         await asyncio.sleep(3)
-        print('buy', response)
         try:
             if response['status'] == 'ok':
                 await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
