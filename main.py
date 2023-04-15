@@ -176,7 +176,7 @@ async def set_if_scanning(tg_id: int, is_scanning:bool):
 ##################
 
 async def async_get_request(url:str, headers:dict={}, proxy:str=""):
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession(headers=headers, trust_env=True) as session:
         async with session.get(url, proxy=proxy) as response:
             try:
                 return await response.json()
@@ -298,8 +298,14 @@ class MyLolz:
                 await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
                 return {'items':[]} 
         else:
-            await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response.reason}\n\nБот продолжает скан")
-            return {'items':[]}
+            try:
+                response.raise_for_status()
+                return {'items':[]}
+            except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError): 
+                return {'items':[]}
+            except Exception as E:
+                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {E.response.reason}\n\nБот продолжает скан")
+                return {'items':[]}
            # response.raise_for_status()
             #await bot.send_message(5509484655, f" get acc func: {response}")
 
