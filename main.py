@@ -285,7 +285,6 @@ class MyLolz:
         'Authorization': f'Bearer {token}',
         }
 
-
     async def get_accounts(self, link, title):
         try:
             response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
@@ -300,7 +299,6 @@ class MyLolz:
                     return {'items':[]} 
         except:
             return {'items':[]}
-
            # response.raise_for_status()
             #await bot.send_message(5509484655, f" get acc func: {response}")
 
@@ -315,6 +313,9 @@ class MyLolz:
             except:
                 await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: '+response['errors'][0]+"\n\nбот продолжает скан")
                 raise AccountBuyingError
+
+        except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError):
+            raise AccountBuyingError
 
         except Exception as E:
             await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: ',E.response.reason,"\n\nбот продолжает скан")
