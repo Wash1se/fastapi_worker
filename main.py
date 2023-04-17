@@ -185,7 +185,7 @@ async def async_get_request(url:str, headers:dict={}, proxy:str=""):
                 return response
 
 async def async_post_request(url:str, headers:dict=None, proxy:str=None, data:dict={}):
-    async with aiohttp.ClientSession(headers=headers, raise_for_status=True) as session:
+    async with aiohttp.ClientSession(headers=headers) as session:
         async with session.post(url, proxy=proxy, data=data) as response:
             try:
                 return await response.json()
@@ -287,47 +287,41 @@ class MyLolz:
 
 
     async def get_accounts(self, link, title):
-        response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
-        await asyncio.sleep(3.2)
-        if type(response) == dict:   
-            try:
-                response["searchUrl"]
-                #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                return response
-            except:
-                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
-                return {'items':[]} 
-        else:
-            try:
-                response.raise_for_status()
-                return {'items':[]}
-            except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError): 
-                return {'items':[]}
-            except Exception as E:
-                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {E.response.reason}\n\nБот продолжает скан")
-                return {'items':[]}
+        try:
+            response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
+            await asyncio.sleep(3.2)
+            if type(response) == dict:   
+                try:
+                    response["searchUrl"]
+                    #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
+                    return response
+                except:
+                    await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
+                    return {'items':[]} 
+        except:
+            return {'items':[]}
+
            # response.raise_for_status()
             #await bot.send_message(5509484655, f" get acc func: {response}")
 
     async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
-        response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
-        await asyncio.sleep(3)
         try:
-            if response['status'] == 'ok':
-                await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
+            response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
+            await asyncio.sleep(3)
+            try:
+                if response['status'] == 'ok':
+                    await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
+                    self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
+            except:
+                await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: '+response['errors'][0]+"\n\nбот продолжает скан")
+                raise AccountBuyingError
 
-
-                self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
-                
-
-        except:
-            await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: '+response['errors'][0]+"\n\nбот продолжает скан")
+        except Exception as E:
+            await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: ',E.response.reason,"\n\nбот продолжает скан")
             raise AccountBuyingError
-            
 
 
     async def scan_accounts(self, link=None, max_purchases=None, account_input_info:Account=None) -> None:
-
         link = link.replace("https://zelenka.guru/market/", self.__base_url).replace("https://lzt.market/",
         self.__base_url).replace("https://lolz.live/market/", self.__base_url).replace("https://lolz.guru/market/",
         self.__base_url).replace("https://api.lolz.guru/market/", self.__base_url)+f"&page={self.page}"
