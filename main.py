@@ -124,7 +124,6 @@ async def get_if_scanning(tg_id:int):
     async with async_session() as session:
         async with session.begin():
             result=(await session.execute(select(ScanningUser).filter_by(tg_id=tg_id))).scalar_one_or_none()
-            print('RESULT', result, type(result))
             if result is None:
                 return None
             else:
@@ -267,7 +266,6 @@ class MyLolz:
             try:
                 response = await async_get_request(url=self.__base_url, headers=self.headers, proxy=self.proxy)
                 self.user_id = response['system_info']['visitor_id']
-                time.sleep(3)
                 return True
             except:
                 return False
@@ -288,12 +286,12 @@ class MyLolz:
     async def get_accounts(self, link, title):
         try:
             response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
-            await asyncio.sleep(3.2)
+            await asyncio.sleep(6.2)
             if type(response) == dict:   
                 try:
-                    response["searchUrl"]
+                    if response["totalItems"]:
+                        return response
                     #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                    return response
                 except:
                     await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
                     return {'items':[]} 
@@ -305,7 +303,7 @@ class MyLolz:
     async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
         try:
             response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
-            await asyncio.sleep(3)
+            await asyncio.sleep(6.1)
             try:
                 if response['status'] == 'ok':
                     await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
@@ -315,11 +313,10 @@ class MyLolz:
                 raise AccountBuyingError
 
         except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError):
-            raise AccountBuyingError
+            raise AccountBuyingError('Не удалось купить аккаунт: ', 'ошибка подключения (прокси/лолз)',"\n\nбот продолжает скан")
 
         except Exception as E:
-            await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: ',E.response.reason,"\n\nбот продолжает скан")
-            raise AccountBuyingError
+            raise AccountBuyingError('Не удалось купить аккаунт: ',E.response.reason,"\n\nбот продолжает скан")
 
 
     async def scan_accounts(self, link=None, max_purchases=None, account_input_info:Account=None) -> None:
@@ -329,7 +326,7 @@ class MyLolz:
 
         items = await self.get_accounts(link, account_input_info.title)
          
-        if items["items"] != []:
+        if items and items["items"] != []:
             for item in items['items']:
                 if str(item["seller"]["user_id"]) == str(self.user_id): 
                     continue
@@ -344,6 +341,7 @@ class MyLolz:
                     await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_input_info.title}...")
                     await self.fast_buy(item_id=id, item_price=price, account_input_info=account_input_info)
                 except Exception as E:
+                    await send_response_to_django(self.tg_id, E)
                     break
 
                 if (len(self.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(self.tg_id)):
@@ -371,6 +369,7 @@ async def worker(tg_id:int, user_config:Config):
             max_purchases = int(user_config.max_purchases)
 
             await send_response_to_django(tg_id, 'Скан аккаунтов...\nДля остановки введи "/stop_scanning"')
+            await asyncio.sleep(6.2)
 
             while True:
                 #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
