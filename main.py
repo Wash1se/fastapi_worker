@@ -284,18 +284,20 @@ class MyLolz:
         }
 
     async def get_accounts(self, link, title):
+        #await send_response_to_django(5509484655, "geting accs")
         try:
             response = await async_get_request(link+"&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
             await asyncio.sleep(6.2)
-            if type(response) == dict:   
-                try:
-                    if response["totalItems"]:
-                        await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                        return response
-                except:
-                    await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
-                    return {'items':[]} 
-        except:
+            try:
+                assert type(response['items']) == list
+                #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
+                return response
+            except Exception as e:
+                #await send_response_to_django(5509484655, f"exc1 {e}")
+                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
+                return {'items':[]} 
+        except Exception as e:
+            #await send_response_to_django(5509484655, f"exc2 {e}")
             return {'items':[]}
            # response.raise_for_status()
             #await bot.send_message(5509484655, f" get acc func: {response}")
@@ -310,7 +312,7 @@ class MyLolz:
                     self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
             except:
                 await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: '+response['errors'][0]+"\n\nбот продолжает скан")
-                raise AccountBuyingError
+                return
 
         except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError):
             raise AccountBuyingError('Не удалось купить аккаунт: ', 'ошибка подключения (прокси/лолз)',"\n\nбот продолжает скан")
@@ -326,8 +328,8 @@ class MyLolz:
 
         items = await self.get_accounts(link, account_input_info.title)
          
-        if items and items != []:
-            for item in items:
+        if items and items['items'] != []:
+            for item in items['items']:
                 if str(item["seller"]["user_id"]) == str(self.user_id): 
                     continue
 
@@ -340,7 +342,7 @@ class MyLolz:
                 try:
                     await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_input_info.title}...")
                     await self.fast_buy(item_id=id, item_price=price, account_input_info=account_input_info)
-                except Exception as E:
+                except AccountBuyingError as E:
                     await send_response_to_django(self.tg_id, E)
                     break
 
