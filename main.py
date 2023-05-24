@@ -285,13 +285,13 @@ class MyLolz:
 
     async def get_accounts(self, link, title):
         try:
-            response = await async_get_request(link+"?nsb_by_me=1&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
+            response = await async_get_request(link+"&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
             await asyncio.sleep(6.2)
             if type(response) == dict:   
                 try:
                     if response["totalItems"]:
+                        await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
                         return response
-                    #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
                 except:
                     await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
                     return {'items':[]} 
@@ -326,13 +326,13 @@ class MyLolz:
 
         items = await self.get_accounts(link, account_input_info.title)
          
-        if items and items["items"] != []:
-            for item in items['items']:
+        if items and items != []:
+            for item in items:
                 if str(item["seller"]["user_id"]) == str(self.user_id): 
                     continue
 
                 #7 = len('market/')
-                category = link[link.rfind('market/')+7:link.rfind('/?')]
+                # category = link[link.rfind('market/')+7:link.rfind('/?')]
                     
                 id = str(item['item_id'])
                 price = str(item['price'])
@@ -379,7 +379,6 @@ async def worker(tg_id:int, user_config:Config):
 
                 #iterate for each account
                 for account_input_info in user_config.accounts:
-
                     #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
                     if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(tg_id)):
                         await set_if_scanning(tg_id, False)
