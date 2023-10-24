@@ -275,6 +275,7 @@ class MyLolz:
         self.proxy = proxy
         self.tg_id = tg_id
         self.user_id = None
+        self.id_of_ignoring_users = []
         self.__base_url = "https://api.lzt.market/"
         self.purchased_accounts = {}
 
@@ -282,6 +283,12 @@ class MyLolz:
         self.headers = {
         'Authorization': f'Bearer {token}',
         }
+
+    async def load_id_of_ignoring_users(self) -> None:
+        url = "https://api.zelenka.guru/users/ignored"
+        response = await async_get_request(url=url, headers=self.headers, proxy=self.proxy)
+        for block_user in response["users"]:
+            self.id_of_ignoring_users.append(block_user["user_id"])
 
     async def get_accounts(self, link, title):
         #await send_response_to_django(5509484655, "geting accs")
@@ -330,7 +337,8 @@ class MyLolz:
          
         if items and items['items'] != []:
             for item in items['items']:
-                if str(item["seller"]["user_id"]) == str(self.user_id): 
+                seller_id = int(item["seller"]["user_id"])
+                if (seller_id == int(self.user_id)) or (seller_id in self.id_of_ignoring_users): 
                     continue
 
                 #7 = len('market/')
@@ -367,10 +375,13 @@ async def worker(tg_id:int, user_config:Config):
         lolzbot = MyLolz(token=user_config.token, tg_id=tg_id, proxy=str(user_config.proxy))
 
         if await lolzbot.set_lolz_id():
+
             #get info about max purchases user's config
             max_purchases = int(user_config.max_purchases)
 
-            await send_response_to_django(tg_id, 'Скан аккаунтов...\nДля остановки введи "/stop_scanning"')
+            await lolzbot.load_id_of_ignoring_users()
+
+            await send_response_to_django(tg_id, f'Скан аккаунтов запущен.\nИгнорируется {len(lolzbot.id_of_ignoring_users)} пользователей.\nДля остановки введи "/stop_scanning"')
             await asyncio.sleep(3.2)
 
             while True:
