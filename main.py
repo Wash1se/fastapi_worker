@@ -287,7 +287,7 @@ class MyLolz:
         #await send_response_to_django(5509484655, "geting accs")
         try:
             response = await async_get_request(link+"&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
-            await asyncio.sleep(6.2)
+            await asyncio.sleep(3.2)
             try:
                 assert type(response['items']) == list
                 #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
@@ -305,20 +305,20 @@ class MyLolz:
     async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
         try:
             response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
-            await asyncio.sleep(6.1)
+            await asyncio.sleep(3.3)
             try:
                 if response['status'] == 'ok':
                     await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
                     self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
             except:
-                await send_response_to_django(self.tg_id, 'Не удалось купить аккаунт: '+response['errors'][0]+"\n\nбот продолжает скан")
+                await send_response_to_django(self.tg_id, f'Не удалось купить аккаунт: {response["errors"][0]}\n\nбот продолжает скан')
                 return
 
         except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError):
-            raise AccountBuyingError('Не удалось купить аккаунт: ', 'ошибка подключения (прокси/лолз)',"\n\nбот продолжает скан")
+            raise AccountBuyingError('Не удалось купить аккаунт: ошибка подключения (прокси/лолз)\n\nбот продолжает скан')
 
         except Exception as E:
-            raise AccountBuyingError('Не удалось купить аккаунт: ',E.response.reason,"\n\nбот продолжает скан")
+            raise AccountBuyingError(f'Не удалось купить аккаунт: {E.response.reason}\n\nбот продолжает скан')
 
 
     async def scan_accounts(self, link=None, max_purchases=None, account_input_info:Account=None) -> None:
@@ -371,7 +371,7 @@ async def worker(tg_id:int, user_config:Config):
             max_purchases = int(user_config.max_purchases)
 
             await send_response_to_django(tg_id, 'Скан аккаунтов...\nДля остановки введи "/stop_scanning"')
-            await asyncio.sleep(6.2)
+            await asyncio.sleep(3.2)
 
             while True:
                 #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
