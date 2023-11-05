@@ -1,3 +1,4 @@
+from ctypes import Union
 from pydantic import BaseModel
 from sqlalchemy import Column, BigInteger, Boolean, String, DateTime
 from sqlalchemy import update, select
@@ -14,7 +15,7 @@ import settings
 import uvicorn
 import requests
 import aiohttp
-from typing import List
+from typing import List, NoReturn
 import json
 
 
@@ -277,7 +278,7 @@ class MyLolz:
         self.user_id = None
         self.id_of_ignoring_users = []
         self.__base_url = "https://api.lzt.market/"
-        self.purchased_accounts = {}
+        self.purchased_accounts = set()
 
         self.page = 1
         self.headers = {
@@ -288,82 +289,145 @@ class MyLolz:
         url = "https://api.zelenka.guru/users/ignored"
         response = await async_get_request(url=url, headers=self.headers, proxy=self.proxy)
         for block_user in response["users"]:
-            self.id_of_ignoring_users.append(block_user["user_id"])
+            self.id_of_ignoring_users.append(int(block_user["user_id"]))
 
-    async def get_accounts(self, link, title):
+    async def get_accounts(self, accounts_batch):
         #await send_response_to_django(5509484655, "geting accs")
         try:
-            response = await async_get_request(link+"&order_by=price_to_up", headers=self.headers, proxy=self.proxy)
+            response = await async_post_request(
+                url=self.__base_url+"batch/",
+                headers=self.headers,
+                proxy=self.proxy,
+                data=accounts_batch
+            )
             await asyncio.sleep(3.2)
             try:
-                assert type(response['items']) == list
+                return response["jobs"]
                 #await send_response_to_django(self.tg_id, f'[{time.strftime("%H:%M:%S")}] {title}: найдено {response["totalItems"]} шт')
-                return response
             except Exception as e:
                 #await send_response_to_django(5509484655, f"exc1 {e}")
-                await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
-                return {'items':[]} 
+                await send_response_to_django(self.tg_id, f"Ошибка получения партии аккаунтов\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает работу")
+                return {} 
         except Exception as e:
             #await send_response_to_django(5509484655, f"exc2 {e}")
-            return {'items':[]}
+            return {}
            # response.raise_for_status()
             #await bot.send_message(5509484655, f" get acc func: {response}")
 
-    async def fast_buy(self, item_id:str, item_price:str, account_input_info:Account) -> bool:
+    async def fast_buy(self, item_id:str, item_price:str, account_title: str) -> None:
         try:
             response = await async_post_request(f"{self.__base_url+item_id}/fast-buy/", headers=self.headers, proxy=self.proxy, data={"price":item_price})
             await asyncio.sleep(3.3)
             try:
                 if response['status'] == 'ok':
-                    await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
-                    self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
+                    await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_title} куплен")
+                    self.purchased_accounts.add(item_id)
             except:
                 await send_response_to_django(self.tg_id, f'Не удалось купить аккаунт: {response["errors"][0]}\n\nбот продолжает скан')
-                return
 
         except (aiohttp.ClientHttpProxyError, aiohttp.ClientProxyConnectionError):
             raise AccountBuyingError('Не удалось купить аккаунт: ошибка подключения (прокси/лолз)\n\nбот продолжает скан')
 
         except Exception as E:
-            raise AccountBuyingError(f'Не удалось купить аккаунт: {E.response.reason}\n\nбот продолжает скан')
+            raise AccountBuyingError(f'Не удалось купить аккаунт: {E.response.reason}\n\nбот продолжает работу')
+
+        except Exception as E:
+            print(f"BUYING EXCEPTION {E}")
+            pass
+
+    async def scan_accounts(self, accounts_batch, max_purchases=None) -> bool:
+        get_ten_accounts_result = await self.get_accounts(accounts_batch)
+
+        #check if result of getting batch of acconts is emtpy and 
+        if len(get_ten_accounts_result) <= 0 :
+            return False #Если return пустой, значит в get_accounts была ошибка, ведь только тогда возвращается пустой словарь
+
+        #iteration for each job(account_scanning_result)
+        for account_title in get_ten_accounts_result:
+            # get the value by key from response (dict)
+            found_results = get_ten_accounts_result[account_title]
+
+            #check and send msg to client if there was an error in getting specific account
+            if found_results['_job_result'] == "error":
+                await send_response_to_django(
+                    self.tg_id,
+                    f"Ошибка получения аккаунтов {account_title}: {found_results['_job_error']}"
+                )
+                continue
+            
+            #get list of accounts of completed job
+            items = found_results['items']
+            
+            #iterate for each account if list of accounts is not empty
+            if len(items) > 0:
+                for account in items:
+
+                    #get id, price and seller_id for current account
+                    id = str(account['item_id'])
+                    price = str(account['price'])
+
+                    lolzteam_member_url = "https://zelenka.guru/members/"
+                    lolzteam_market_url = "https://lzt.market/"
+                    seller_id = int(account['seller']['user_id'])
+
+                    #check if account owner is (client or blocked user) or if account was already purchased
+                    #!!!! type(id)=str and type(self.purchased_accounts)=set[str] | purchased_accounts consists of IDs
+                    if (seller_id == int(self.user_id)) or (id in self.purchased_accounts):
+                        continue
+                    if (seller_id in self.id_of_ignoring_users):
+                        await send_response_to_django(self.tg_id, f"Владелец [{lolzteam_member_url+str(seller_id)}] найденного аккаунта [{lolzteam_market_url+id}] находится у вас в ченом списке. Игнорирование аккаунта\n\nБот продолжает работу")
+                        continue
+
+                    #try to buy account
+                    try:
+                        await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_title}...")
+                        await self.fast_buy(item_id=id, item_price=price, account_title=account_title)
+                    except AccountBuyingError as E:
+                        await send_response_to_django(self.tg_id, E)
+                        break
+
+                    #check if it is necessary to stop the bot
+                    if (len(self.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(self.tg_id)):
+                        await send_response_to_django(self.tg_id, 'Бот завершил работу (max_purchases)')
+                        await set_if_scanning(self.tg_id, False)
+                        return False
+        return True
 
 
-    async def scan_accounts(self, link=None, max_purchases=None, account_input_info:Account=None) -> None:
-        link = link.replace("https://zelenka.guru/market/", self.__base_url).replace("https://lzt.market/",
-        self.__base_url).replace("https://lolz.live/market/", self.__base_url).replace("https://lolz.guru/market/",
-        self.__base_url).replace("https://api.lolz.guru/market/", self.__base_url)+f"&page={self.page}"
 
-        items = await self.get_accounts(link, account_input_info.title)
-         
-        if items and items['items'] != []:
-            for item in items['items']:
-                seller_id = int(item["seller"]["user_id"])
-                if (seller_id == int(self.user_id)) or (seller_id in self.id_of_ignoring_users): 
-                    continue
+def parse_all_links_list(accounts):
+    """
+    Распарсивает аккаунты из конфига пользователя в список из списков из 10 аккаунтов
+    """
+    MAX_BATCH_SIZE = 9
+    temp_list = []
+    all_links_list = []
+    for account_block in accounts:
+        account_name = account_block['title']
+        account_url = account_block['link'].replace("https://zelenka.guru/market/", "https://api.lzt.market/").replace("https://lzt.market/", "https://api.lzt.market/")\
+        .replace("https://lolz.live/market/", "https://api.lzt.market/").replace("https://lolz.guru/market/", "https://api.lzt.market/")\
+        .replace("https://api.lolz.guru/market/", "https://api.lzt.market/")
+        
+        temp_list.append(
+            {
+                "id": account_name,
+                "uri": account_url
+            }
+        )
 
-                #7 = len('market/')
-                # category = link[link.rfind('market/')+7:link.rfind('/?')]
-                    
-                id = str(item['item_id'])
-                price = str(item['price'])
+    while len(temp_list) >= 1:
+        min_len = min(MAX_BATCH_SIZE, len(temp_list))
+        all_links_list.append(
+            temp_list[:min_len]
+        )
+        del temp_list[:min_len]
 
-                try:
-                    await send_response_to_django(self.tg_id, f"Попытка покупки аккаунтов {account_input_info.title}...")
-                    await self.fast_buy(item_id=id, item_price=price, account_input_info=account_input_info)
-                except AccountBuyingError as E:
-                    await send_response_to_django(self.tg_id, E)
-                    break
-
-                if (len(self.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(self.tg_id)):
-                    await send_response_to_django(self.tg_id, 'Бот завершил скан аккаунтов (max_purchases)')
-                    await set_if_scanning(self.tg_id, False)
-                    return False
-
-
-
+    return all_links_list
 
 
 async def worker(tg_id:int, user_config:Config):
+
+    accounts = parse_all_links_list(user_config.accounts)
 
     #check if StopLztBot flag is True
     if not await get_if_scanning(tg_id):
@@ -390,8 +454,8 @@ async def worker(tg_id:int, user_config:Config):
                     await set_if_scanning(tg_id, False)
                     return 
 
-                #iterate for each account
-                for account_input_info in user_config.accounts:
+                #iterate for each account_batch
+                for accounts_batch in accounts:
                     #check if StopLztBot flag is True or amount of purchased accounts is over than max purchases
                     if (len(lolzbot.purchased_accounts) >= int(max_purchases)) or (not await get_if_scanning(tg_id)):
                         await set_if_scanning(tg_id, False)
@@ -399,12 +463,12 @@ async def worker(tg_id:int, user_config:Config):
                     
                     # try to scan accounts
                     try:
-                        await lolzbot.scan_accounts(account_input_info=account_input_info, link=account_input_info.link, max_purchases=max_purchases)
+                        await lolzbot.scan_accounts(accounts_batch=accounts_batch, link=account_input_info.link, max_purchases=max_purchases)
                     #handling all exceptions occured within the lztbot
                     except Exception as e:
                         await send_response_to_django(tg_id, ERROR_MSG.format(f"{e.args}\n\nбот продолжает скан"))
         else:
-            await send_response_to_django(tg_id, 'Ошибка с прокси\n\nБот останавливает скан')
+            await send_response_to_django(tg_id, 'Ошибка с прокси\n\nБот завершил работу')
             await set_if_scanning(tg_id, False)
             return         
 
