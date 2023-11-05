@@ -181,12 +181,11 @@ async def async_get_request(url:str, headers:dict={}, proxy:str=""):
             try:
                 return await response.json()
             except Exception as e:
-                print(e)
                 return response
 
-async def async_post_request(url:str, headers:dict=None, proxy:str=None, data:dict={}):
+async def async_post_request(url:str, headers:dict=None, proxy:str=None, data=None, json=None):
     async with aiohttp.ClientSession(headers=headers) as session:
-        async with session.post(url, proxy=proxy, data=data) as response:
+        async with session.post(url, data=data, proxy=proxy, json=json) as response:
             try:
                 return await response.json()
             except:
@@ -270,6 +269,7 @@ class MyLolz:
                 return True
             except:
                 return False
+        return True
 
 
     def __init__(self, token:str, tg_id, proxy) -> None:
@@ -298,7 +298,7 @@ class MyLolz:
                 url=self.__base_url+"batch/",
                 headers=self.headers,
                 proxy=self.proxy,
-                data=accounts_batch
+                json=accounts_batch
             )
             await asyncio.sleep(3.2)
             try:
@@ -307,9 +307,10 @@ class MyLolz:
             except Exception as e:
                 #await send_response_to_django(5509484655, f"exc1 {e}")
                 await send_response_to_django(self.tg_id, f"Ошибка получения партии аккаунтов\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает работу")
+                await asyncio.sleep(3.2)
                 return {} 
         except Exception as e:
-            #await send_response_to_django(5509484655, f"exc2 {e}")
+            await asyncio.sleep(3.2)
             return {}
            # response.raise_for_status()
             #await bot.send_message(5509484655, f" get acc func: {response}")
@@ -337,7 +338,6 @@ class MyLolz:
 
     async def scan_accounts(self, accounts_batch, max_purchases=None) -> bool:
         get_ten_accounts_result = await self.get_accounts(accounts_batch)
-
         #check if result of getting batch of acconts is emtpy and 
         if len(get_ten_accounts_result) <= 0 :
             return False #Если return пустой, значит в get_accounts была ошибка, ведь только тогда возвращается пустой словарь
@@ -346,7 +346,7 @@ class MyLolz:
         for account_title in get_ten_accounts_result:
             # get the value by key from response (dict)
             found_results = get_ten_accounts_result[account_title]
-
+            #print(f"{account_title} найдено {found_results['totalItems']} шт")
             #check and send msg to client if there was an error in getting specific account
             if found_results['_job_result'] == "error":
                 await send_response_to_django(
@@ -403,8 +403,8 @@ def parse_all_links_list(accounts):
     temp_list = []
     all_links_list = []
     for account_block in accounts:
-        account_name = account_block['title']
-        account_url = account_block['link'].replace("https://zelenka.guru/market/", "https://api.lzt.market/").replace("https://lzt.market/", "https://api.lzt.market/")\
+        account_name = account_block.title
+        account_url = account_block.link.replace("https://zelenka.guru/market/", "https://api.lzt.market/").replace("https://lzt.market/", "https://api.lzt.market/")\
         .replace("https://lolz.live/market/", "https://api.lzt.market/").replace("https://lolz.guru/market/", "https://api.lzt.market/")\
         .replace("https://api.lolz.guru/market/", "https://api.lzt.market/")
         
@@ -428,11 +428,10 @@ def parse_all_links_list(accounts):
 async def worker(tg_id:int, user_config:Config):
 
     accounts = parse_all_links_list(user_config.accounts)
-
     #check if StopLztBot flag is True
     if not await get_if_scanning(tg_id):
         return
-
+    
     #get info from user's config
     try:
         #lztbot initializing
@@ -463,7 +462,7 @@ async def worker(tg_id:int, user_config:Config):
                     
                     # try to scan accounts
                     try:
-                        await lolzbot.scan_accounts(accounts_batch=accounts_batch, link=account_input_info.link, max_purchases=max_purchases)
+                        await lolzbot.scan_accounts(accounts_batch=accounts_batch, max_purchases=max_purchases)
                     #handling all exceptions occured within the lztbot
                     except Exception as e:
                         await send_response_to_django(tg_id, ERROR_MSG.format(f"{e.args}\n\nбот продолжает скан"))
@@ -498,7 +497,6 @@ app = FastAPI(title="lzttgbot")
 async def start(data:StartData):
     tg_id = data.tg_id
     user_config = data.user_config
-
     is_scanning = await get_if_scanning(tg_id)
     if is_scanning == True:
         await send_response_to_django(
@@ -537,5 +535,5 @@ async def stop(data:StopData):
 app.include_router(router)
 
 if __name__ == "__main__":
-    uvicorn.run('main:app', host="0.0.0.0", port=8000, workers=3)
+    uvicorn.run('main:app', host="localhost", port=8002, workers=3)
 
