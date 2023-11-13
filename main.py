@@ -277,7 +277,7 @@ class MyLolz:
         self.user_id = None
         self.id_of_ignoring_users = []
         self.__base_url = "https://api.lzt.market/"
-        self.purchased_accounts = {}
+        self.purchased_accounts = set()
 
         self.page = 1
         self.headers = {
@@ -304,6 +304,7 @@ class MyLolz:
                 await send_response_to_django(self.tg_id, f"Ошибка получения аккаунтов {title}\nТекст ошибки: {response['errors'][0]}\n\nБот продолжает скан")
                 return {'items':[]} 
         except Exception as e:
+            await asyncio.sleep(3.2)
             #await send_response_to_django(5509484655, f"exc2 {e}")
             return {'items':[]}
            # response.raise_for_status()
@@ -316,7 +317,7 @@ class MyLolz:
             try:
                 if response['status'] == 'ok':
                     await send_response_to_django(self.tg_id, f"[{time.strftime('%H:%M:%S')}] Аккаунт {account_input_info.title} куплен")
-                    self.purchased_accounts[item_id]={"id":item_id, "price":item_price}
+                    self.purchased_accounts.add(item_id)
             except:
                 await send_response_to_django(self.tg_id, f'Не удалось купить аккаунт: {response["errors"][0]}\n\nбот продолжает скан')
                 return
@@ -338,13 +339,14 @@ class MyLolz:
         if items and items['items'] != []:
             for item in items['items']:
                 seller_id = int(item["seller"]["user_id"])
-                if (seller_id == int(self.user_id)) or (seller_id in self.id_of_ignoring_users): 
+                id = str(item['item_id'])
+                
+                if (seller_id == int(self.user_id)) or (seller_id in self.id_of_ignoring_users) or (id in self.purchased_accounts): 
                     continue
 
                 #7 = len('market/')
                 # category = link[link.rfind('market/')+7:link.rfind('/?')]
                     
-                id = str(item['item_id'])
                 price = str(item['price'])
 
                 try:
