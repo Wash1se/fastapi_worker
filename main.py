@@ -365,17 +365,11 @@ class MyLolz:
                     #get id, price and seller_id for current account
                     id = str(account['item_id'])
                     price = str(account['price'])
-
-                    lolzteam_member_url = "https://zelenka.guru/members/"
-                    lolzteam_market_url = "https://lzt.market/"
                     seller_id = int(account['seller']['user_id'])
 
                     #check if account owner is (client or blocked user) or if account was already purchased
                     #!!!! type(id)=str and type(self.purchased_accounts)=set[str] | purchased_accounts consists of IDs
-                    if (seller_id == int(self.user_id)) or (id in self.purchased_accounts):
-                        continue
-                    if (seller_id in self.id_of_ignoring_users):
-                        await send_response_to_django(self.tg_id, f"Владелец [{lolzteam_member_url+str(seller_id)}] найденного аккаунта [{lolzteam_market_url+id}] находится у вас в ченом списке. Игнорирование аккаунта\n\nБот продолжает работу")
+                    if (seller_id == int(self.user_id)) or (id in self.purchased_accounts) or (seller_id in self.id_of_ignoring_users):
                         continue
 
                     #try to buy account
